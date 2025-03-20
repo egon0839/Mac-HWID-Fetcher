@@ -18,3 +18,7 @@ This script utilizes the `ioreg` command to extract the **IOPlatformUUID**, whic
 Ensure you have **Python 3** installed. You can check by running:
 ```sh
 python3 --version
+## To Install execute this script in the Termnial.
+git clone https://github.com/yourusername/mac-hwid-fetcher.git
+cd mac-hwid-fetcher
+python3 get_hwid.py

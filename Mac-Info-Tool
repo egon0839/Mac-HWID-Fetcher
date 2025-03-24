@@ -1,0 +1,145 @@
+import subprocess
+import socket
+import platform
+import os
+from rich.console import Console
+from rich.table import Table
+from rich.panel import Panel
+from rich.text import Text
+
+console = Console()
+
+def run_command(cmd):
+    try:
+        return subprocess.check_output(cmd, shell=True).decode().strip()
+    except subprocess.CalledProcessError:
+        return "N/A"
+
+def get_system_info():
+    info = {}
+    
+    # Basic System Info
+    info["Hostname"] = socket.gethostname()
+    info["IP Address"] = socket.gethostbyname(info["Hostname"])
+    info["macOS Version"] = platform.mac_ver()[0]
+    info["Build Version"] = run_command("sw_vers -buildVersion")
+    info["Kernel Version"] = run_command("uname -r")
+    
+    # Hardware Info
+    info["Hardware UUID"] = run_command("ioreg -rd1 -c IOPlatformExpertDevice | awk -F'\"' '/IOPlatformUUID/{print $4}'")
+    info["Serial Number"] = run_command("system_profiler SPHardwareDataType | awk '/Serial/ {print $4}'")
+    info["Model Identifier"] = run_command("sysctl -n hw.model")
+    info["Model Name"] = run_command("system_profiler SPHardwareDataType | awk '/Model Name/ {print substr($0, index($0,$3))}'")
+    info["Boot ROM Version"] = run_command("system_profiler SPHardwareDataType | awk '/Boot ROM/ {print $4}'")
+    info["SMC Version"] = run_command("system_profiler SPHardwareDataType | awk '/SMC/ {print $4}'")
+    
+    # CPU Info
+    info["Processor"] = run_command("sysctl -n machdep.cpu.brand_string")
+    info["Core Count"] = run_command("sysctl -n hw.ncpu")
+    info["CPU Speed"] = run_command("sysctl -n hw.cpufrequency | awk '{print $1/1000000\" GHz\"}'")
+    
+    # Memory Info
+    mem_bytes = int(run_command("sysctl -n hw.memsize"))
+    info["Memory"] = f"{round(mem_bytes / (1024**3), 1)} GB"
+
+    
+    # Storage Info
+    disk_info = run_command("df -h / | awk 'NR==2{print $2,$3,$4,$5}'").split()
+    info["Storage Capacity"] = disk_info[0]
+    info["Storage Used"] = disk_info[1]
+    info["Storage Available"] = disk_info[2]
+    info["Storage Usage %"] = disk_info[3]
+    
+    # Battery Info (for laptops)
+    battery_info = run_command("system_profiler SPPowerDataType | grep -E 'Cycle Count|Condition|Maximum Capacity'")
+    if battery_info != "N/A":
+        for line in battery_info.split('\n'):
+            if "Cycle Count" in line:
+                info["Battery Cycles"] = line.split(':')[-1].strip()
+            elif "Maximum Capacity" in line:
+                info["Battery Health"] = line.split(':')[-1].strip()
+            elif "Condition" in line:
+                info["Battery Condition"] = line.split(':')[-1].strip()
+    
+    # Graphics Info
+    info["Graphics"] = run_command("system_profiler SPDisplaysDataType | awk -F': ' '/Chipset Model|Resolution/{print $2}' | paste -sd ',' -")
+    
+    # Network Info
+    info["Wi-Fi MAC"] = run_command("ifconfig en0 | awk '/ether/{print $2}'")
+    info["Ethernet MAC"] = run_command("ifconfig en1 | awk '/ether/{print $2}'")
+    info["Bluetooth MAC"] = run_command("system_profiler SPBluetoothDataType | awk '/Address/{print $2}' | head -1")
+    
+    # Security Info
+    info["SIP Status"] = run_command("csrutil status | awk '{print $5}'")
+    info["Gatekeeper"] = run_command("spctl --status")
+    info["Firewall"] = run_command("defaults read /Library/Preferences/com.apple.alf globalstate")
+    
+    # System Uptime
+    uptime = run_command("uptime | awk -F'up ' '{print $2}' | awk -F',' '{print $1}'")
+    info["Uptime"] = uptime if uptime != "N/A" else run_command("sysctl -n kern.boottime | awk '{print $4}' | sed 's/,//'")
+    
+    return info
+
+def display_info(info_dict):
+    console.print("\n[bold cyan]🍏 Comprehensive Mac System Information[/bold cyan]\n")
+    
+    # Create tables for different categories
+    categories = {
+        "System Overview": [
+            "Hostname", "macOS Version", "Build Version", 
+            "Kernel Version", "Uptime", "Model Name"
+        ],
+        "Hardware Details": [
+            "Model Identifier", "Serial Number", "Hardware UUID",
+            "Boot ROM Version", "SMC Version"
+        ],
+        "Performance": [
+            "Processor", "Core Count", "CPU Speed",
+            "Memory", "Graphics"
+        ],
+        "Storage": [
+            "Storage Capacity", "Storage Used", 
+            "Storage Available", "Storage Usage %"
+        ],
+        "Network": [
+            "IP Address", "Wi-Fi MAC", "Ethernet MAC",
+            "Bluetooth MAC"
+        ],
+        "Security": [
+            "SIP Status", "Gatekeeper", "Firewall"
+        ]
+    }
+    
+    # Add battery info if available
+    if "Battery Cycles" in info_dict:
+        categories["Battery"] = [
+            "Battery Cycles", "Battery Health", "Battery Condition"
+        ]
+    
+    for category, items in categories.items():
+        table = Table(title=f"[bold yellow]{category}[/bold yellow]", show_header=True, header_style="bold magenta")
+        table.add_column("Property", style="dim", width=22)
+        table.add_column("Value", style="bright_white")
+        
+        for item in items:
+            if item in info_dict:
+                value = info_dict[item]
+                # Format some values for better readability
+                if item == "Gatekeeper" and value != "N/A":
+                    value = "Enabled" if "enabled" in value.lower() else "Disabled"
+                elif item == "Firewall" and value != "N/A":
+                    value = "Enabled" if value == "1" else "Disabled"
+                
+                table.add_row(item, str(value))
+        
+        panel = Panel(
+            table,
+            border_style="bright_blue",
+            padding=(0, 1)
+        )
+        console.print(panel)
+
+if __name__ == "__main__":
+    console.print("\n[bold]🔍 Gathering system information...[/bold]")
+    system_info = get_system_info()
+    display_info(system_info)

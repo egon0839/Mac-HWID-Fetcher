@@ -19,6 +19,6 @@ Ensure you have **Python 3** installed. You can check by running:
 ```sh
 python3 --version
 ## To Install execute this script in the Termnial.
-git clone https://github.com/yourusername/mac-hwid-fetcher.git
+git clone https://github.com/egon0839/Mac-Multi-Tool
 cd mac-hwid-fetcher
 python3 get_hwid.py
